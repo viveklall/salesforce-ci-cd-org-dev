@@ -1,7 +1,6 @@
 # Unique name for this workflow
 name: Validate PR on develop branch
 
-# Definition when the workflow should run
 on:
   pull_request:
     types: [opened, synchronize]
@@ -15,19 +14,19 @@ jobs:
     if: ${{ github.actor != 'dependabot[bot]' }}
 
     steps:
-      # 🚩 UPDATED: Install Node.js 20 (required for sfdx-git-delta)
+      # ✅ UPDATED: Node.js 20 (required for sfdx-git-delta)
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      # Checkout repository with full commit history
+      # Checkout full history (required for git-delta)
       - name: Checkout source code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      # Read PR body and extract Apex test classes
+      # Read PR body and extract tests
       - name: Read PR Body
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -37,22 +36,22 @@ jobs:
           TESTS=$(cat testsToRun.txt)
           echo "APEX_TESTS=$TESTS" >> $GITHUB_ENV
 
-      # Install Salesforce CLI (sfdx)
+      # ✅ FIXED: Salesforce CLI install (PATH handled correctly)
       - name: Install Salesforce CLI
         run: |
           wget https://developer.salesforce.com/media/salesforce-cli/sfdx/channels/stable/sfdx-linux-x64.tar.xz
-          mkdir ~/sfdx
+          mkdir -p ~/sfdx
           tar xJf sfdx-linux-x64.tar.xz -C ~/sfdx --strip-components 1
           echo "$HOME/sfdx/bin" >> $GITHUB_PATH
-          sfdx version
+          $HOME/sfdx/bin/sfdx version
 
-      # 🚩 FIXED: sfdx-git-delta now works with Node 20
+      # Install sfdx-git-delta (now compatible with Node 20)
       - name: Install sfdx-git-delta
         run: |
           echo y | sfdx plugins:install sfdx-git-delta
           sfdx plugins
 
-      # Install Java (required for Salesforce Scanner)
+      # Install Java (required for scanner)
       - name: Install Java
         run: |
           sudo apt-get update
@@ -62,16 +61,15 @@ jobs:
       - name: Install SFDX Scanner
         run: sfdx plugins:install @salesforce/sfdx-scanner
 
-      # Populate auth file from GitHub secret
+      # Authenticate using SFDX auth URL secret
       - name: Populate auth file with SFDX_URL secret of integration org
         run: |
           echo "${{ secrets.SFDX_INTEGRATION_URL }}" > ./SFDX_INTEGRATION_URL.txt
 
-      # Authenticate to Integration Org
       - name: Authenticate to Integration Org
         run: sfdx auth:sfdxurl:store -f ./SFDX_INTEGRATION_URL.txt -s -a integration
 
-      # Create delta packages using git-delta
+      # Create delta packages
       - name: Create delta packages for new, modified or deleted metadata
         run: |
           mkdir changed-sources
@@ -82,7 +80,7 @@ jobs:
             --output changed-sources \
             --generate-delta
 
-      # Run Apex code scan
+      # Run Apex static scan
       - name: Scan code
         run: |
           cd changed-sources
@@ -93,13 +91,13 @@ jobs:
             --outfile apexScanResults.sarif
           cd ..
 
-      # Upload SARIF results to GitHub
+      # Upload scan results to GitHub
       - name: Upload SARIF file
         uses: github/codeql-action/upload-sarif@v1
         with:
           sarif_file: changed-sources/apexScanResults.sarif
 
-      # Check-only deploy – run specified tests
+      # Check-only deploy – specified tests
       - name: Check-only deploy delta changes - run specified tests
         if: ${{ env.APEX_TESTS != 'all' }}
         run: |
@@ -111,7 +109,7 @@ jobs:
             --runtests ${{ env.APEX_TESTS }} \
             --json
 
-      # Check-only deploy – run all tests
+      # Check-only deploy – all tests
       - name: Check-only deploy delta changes - run all tests
         if: ${{ env.APEX_TESTS == 'all' }}
         run: |
@@ -121,7 +119,7 @@ jobs:
             --testlevel RunLocalTests \
             --json
 
-      # Validate destructive changes (if any)
+      # Validate destructive changes
       - name: Deploy destructive changes (if any)
         run: |
           sfdx force:mdapi:deploy \
