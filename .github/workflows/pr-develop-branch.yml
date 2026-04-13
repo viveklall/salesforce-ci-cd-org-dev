@@ -90,16 +90,14 @@ jobs:
                   echo "APEX_TESTS=$TESTS" >> $GITHUB_ENV
                   
             # Now Install Salesforce CLI
-
             - name: Install Salesforce CLI (sf v2)
-             run: npm install -g @salesforce/cli
+              run: npm install -g @salesforce/cli
 
             - name: Verify Salesforce CLI
-             run: |
-              sf --version
-              sfdx --version
-
-
+              run: |
+                 sf --version
+                 sfdx --version
+                 
             # Then we install the SFDX-Git-Delta plugin - https://github.com/scolladon/sfdx-git-delta
             # This is an awesome plugin that allows us to extract a package.xml with the metadata
             # that has changed between commits. I highly recommend going over the github readme 
