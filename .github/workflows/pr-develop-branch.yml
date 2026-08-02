@@ -16,6 +16,9 @@ jobs:
   validate-deployment-on-develop-org:
     runs-on: ubuntu-latest
     if: github.actor != 'dependabot[bot]'
+    env:
+      # Always invoke the CLI installed by this workflow, never a runner-preinstalled one.
+      SF_CLI: ${{ runner.temp }}/sf-cli/node_modules/.bin/sf
 
     steps:
       - name: Checkout source code
@@ -27,7 +30,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: '22'
+
+      - name: Verify Node.js runtime
+        shell: bash
+        run: |
+          node --version
+          npm --version
+          test "$(node -p 'process.versions.node.split(".")[0]')" -ge 22
 
       - name: Read PR body
         shell: bash
@@ -44,12 +54,12 @@ jobs:
       - name: Install Salesforce CLI
         shell: bash
         run: |
-          npm install --global @salesforce/cli
-          sf --version
+          npm install --prefix "$RUNNER_TEMP/sf-cli" @salesforce/cli
+          "$SF_CLI" --version
 
       - name: Install sfdx-git-delta
         # sfdx-git-delta is unsigned and prompts for confirmation.
-        run: echo y | sf plugins install sfdx-git-delta
+        run: echo y | "$SF_CLI" plugins install sfdx-git-delta
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -58,7 +68,7 @@ jobs:
           java-version: '17'
 
       - name: Install Salesforce Code Analyzer
-        run: sf plugins install @salesforce/plugin-code-analyzer
+        run: "$SF_CLI" plugins install @salesforce/plugin-code-analyzer
 
       - name: Authenticate to Integration Org
         shell: bash
@@ -66,7 +76,7 @@ jobs:
           SFDX_INTEGRATION_URL: ${{ secrets.SFDX_INTEGRATION_URL }}
         run: |
           printf '%s\n' "$SFDX_INTEGRATION_URL" > SFDX_INTEGRATION_URL.txt
-          sf org login sfdx-url \
+          "$SF_CLI" org login sfdx-url \
             --sfdx-url-file SFDX_INTEGRATION_URL.txt \
             --alias integration \
             --set-default
@@ -74,7 +84,7 @@ jobs:
 
       - name: Create delta packages for new, modified, and deleted metadata
         run: |
-          sf sgd source delta \
+          "$SF_CLI" sgd source delta \
             --to HEAD \
             --from "${{ github.event.pull_request.base.sha }}" \
             --output changed-sources \
@@ -83,7 +93,7 @@ jobs:
 
       - name: Scan code
         run: |
-          sf code-analyzer run \
+          "$SF_CLI" code-analyzer run \
             --workspace changed-sources \
             --target 'changed-sources/force-app/**/*.cls' \
             --output-file changed-sources/apexScanResults.sarif
@@ -96,7 +106,7 @@ jobs:
       - name: Check-only deploy delta changes - run specified tests
         if: env.APEX_TESTS != 'all'
         run: |
-          sf project deploy start \
+          "$SF_CLI" project deploy start \
             --source-dir changed-sources/force-app \
             --dry-run \
             --test-level RunSpecifiedTests \
@@ -107,7 +117,7 @@ jobs:
       - name: Check-only deploy delta changes - run all tests
         if: env.APEX_TESTS == 'all'
         run: |
-          sf project deploy start \
+          "$SF_CLI" project deploy start \
             --source-dir changed-sources/force-app \
             --dry-run \
             --test-level RunLocalTests \
@@ -118,7 +128,7 @@ jobs:
         shell: bash
         run: |
           if [ -f changed-sources/destructiveChanges/destructiveChanges.xml ]; then
-            sf project deploy start \
+            "$SF_CLI" project deploy start \
               --metadata-dir changed-sources/destructiveChanges \
               --dry-run \
               --ignore-warnings \
