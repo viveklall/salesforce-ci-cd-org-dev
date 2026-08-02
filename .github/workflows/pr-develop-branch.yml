@@ -23,11 +23,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      # @salesforce/cli requires Node.js 20 or later when installed with npm.
+      # Current Salesforce CLI dependencies require the Node 22 runtime.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Read PR body
         shell: bash
